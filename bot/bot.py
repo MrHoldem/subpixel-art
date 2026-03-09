@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Dict
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 from subpixel_art import make_subpixel_art
@@ -46,16 +46,11 @@ def set_user_opts(user_id: int, **kwargs):
 
 
 def main_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Режим: dither", callback_data="mode:dither"),
-         InlineKeyboardButton("Режим: grayscale", callback_data="mode:grayscale")],
-        [InlineKeyboardButton("Ширина 600", callback_data="width:600"),
-         InlineKeyboardButton("Ширина 800", callback_data="width:800"),
-         InlineKeyboardButton("Ширина 1200", callback_data="width:1200")],
-        [InlineKeyboardButton("Сброс", callback_data="reset"),
-         InlineKeyboardButton("Статус", callback_data="status")],
-        [InlineKeyboardButton("Помощь", callback_data="help")],
-    ])
+    return ReplyKeyboardMarkup([
+        [KeyboardButton("Режим: dither"), KeyboardButton("Режим: grayscale")],
+        [KeyboardButton("Ширина 600"), KeyboardButton("Ширина 800"), KeyboardButton("Ширина 1200")],
+        [KeyboardButton("Статус"), KeyboardButton("Сброс"), KeyboardButton("Помощь")],
+    ], resize_keyboard=True)
 
 
 def help_text():
@@ -116,37 +111,37 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text(), reply_markup=main_keyboard())
 
 
-async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
+async def on_text_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or "").strip()
+    uid = update.effective_user.id
 
-    uid = query.from_user.id
-    if data.startswith("mode:"):
-        mode = data.split(":", 1)[1]
-        set_user_opts(uid, mode=mode, dither=(mode == "dither"))
-        await query.edit_message_text(f"Режим: {mode}", reply_markup=main_keyboard())
-        return
-    if data.startswith("width:"):
-        w = int(data.split(":", 1)[1])
-        set_user_opts(uid, width=w)
-        await query.edit_message_text(f"Ширина: {w}", reply_markup=main_keyboard())
-        return
-    if data == "status":
+    if text == "Режим: dither":
+        set_user_opts(uid, mode="dither", dither=True)
+        return await update.message.reply_text("Режим: dither", reply_markup=main_keyboard())
+    if text == "Режим: grayscale":
+        set_user_opts(uid, mode="grayscale", dither=False)
+        return await update.message.reply_text("Режим: grayscale", reply_markup=main_keyboard())
+
+    if text.startswith("Ширина "):
+        try:
+            w = int(text.split(" ", 1)[1])
+            set_user_opts(uid, width=w)
+            return await update.message.reply_text(f"Ширина: {w}", reply_markup=main_keyboard())
+        except Exception:
+            pass
+
+    if text == "Статус":
         u = state.get(str(uid), {})
-        await query.edit_message_text(
+        return await update.message.reply_text(
             f"Текущие настройки: width={u.get('width')}, mode={u.get('mode','dither')}, dither={u.get('dither', True)}",
             reply_markup=main_keyboard(),
         )
-        return
-    if data == "reset":
+    if text == "Сброс":
         state.pop(str(uid), None)
         save_state(state)
-        await query.edit_message_text("Настройки сброшены", reply_markup=main_keyboard())
-        return
-    if data == "help":
-        await query.edit_message_text(help_text(), reply_markup=main_keyboard())
-        return
+        return await update.message.reply_text("Настройки сброшены", reply_markup=main_keyboard())
+    if text == "Помощь":
+        return await update.message.reply_text(help_text(), reply_markup=main_keyboard())
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -190,7 +185,7 @@ def main():
     app.add_handler(CommandHandler("mode", setmode))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CallbackQueryHandler(on_button))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_menu))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.IMAGE, handle_doc))
 
