@@ -32,8 +32,8 @@ def get_user_opts(user_id: int) -> SubpixelOptions:
     u = state.get(str(user_id), {})
     return SubpixelOptions(
         final_width=u.get("width"),
-        grayscale=u.get("mode", "grayscale") == "grayscale",
-        dither=u.get("dither", False),
+        grayscale=u.get("mode", "dither") == "grayscale",
+        dither=u.get("dither", True),
         keep_aspect=True,
     )
 
@@ -48,6 +48,7 @@ def set_user_opts(user_id: int, **kwargs):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Пришли картинку — сделаю субпиксельный арт.\n"
+        "По умолчанию режим: dither (без серых полутонов).\n"
         "Команды: /setwidth 800, /mode grayscale|dither, /status, /reset"
     )
 
